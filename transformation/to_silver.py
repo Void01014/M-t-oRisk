@@ -3,7 +3,7 @@ import pandas as pd
 from pathlib import Path
 import requests
 
-cities = pd.read_csv("extraction/ma.csv")
+cities = pd.read_csv("bronze/ma.csv")
 
 weather_results = []
 

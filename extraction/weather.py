@@ -2,6 +2,7 @@ import json
 import pandas as pd
 from pathlib import Path
 import requests
+from datetime import date
 
 cities = pd.read_csv("extraction/ma.csv")
 
@@ -36,7 +37,8 @@ for _, row in cities.iterrows():
     response.raise_for_status()
 
     weather_results.append(response.json())
-    
+
+
 all_data = []
 
 for i, weather in enumerate(weather_results):
@@ -55,11 +57,20 @@ for i, weather in enumerate(weather_results):
         "wind_gusts_10m_max": "wind_gust",
     })
 
+    extraction_date = date.today().isoformat()
+
     df["city"] = cities.iloc[i]["city"]
     df["latitude"] = cities.iloc[i]["lat"]
     df["longitude"] = cities.iloc[i]["lng"]
+    df["extraction_date"] = extraction_date
 
     all_data.append(df)
 
-silver_df = pd.concat(all_data, ignore_index=True)
-print(silver_df)
+bronze_df = pd.concat(all_data, ignore_index=True)
+
+today = date.today().isoformat()
+
+output_dir = Path("bronze")
+output_dir.mkdir(exist_ok=True)
+
+bronze_df.to_csv(output_dir / f"weather_{today}.csv", index=False)

@@ -1,65 +1,94 @@
-import json
 import pandas as pd
+from datetime import date
 from pathlib import Path
-import requests
 
-cities = pd.read_csv("bronze/ma.csv")
+today = date.today().isoformat()
 
-weather_results = []
+df = pd.read_csv(f"bronze/weather_{today}.csv")
 
-for _, row in cities.iterrows():
+df["city"] = df["city"].astype("string")
 
-    city_name = row["city"]
-    latitude = row["lat"]
-    longitude = row["lng"]
+df["latitude"] = df["latitude"].astype("float")
+df["longitude"] = df["longitude"].astype("float")
 
-    response = requests.get(
-        "https://api.open-meteo.com/v1/forecast",
-        params={
-            "latitude": latitude,
-            "longitude": longitude,
-            "daily": [
-                "temperature_2m_max",
-                "temperature_2m_min",
-                "precipitation_sum",
-                "precipitation_probability_max",
-                "wind_speed_10m_max",
-                "wind_gusts_10m_max",
-                "weather_code"
-            ],
-            "forecast_days": 7,
-            "timezone": "auto"
-        },
-        timeout=10
+df["date"] = pd.to_datetime(df["date"])
+df["extraction_date"] = pd.to_datetime(df["extraction_date"])
+
+df["temp_max"] = df["temp_max"].astype("float")
+df["temp_min"] = df["temp_min"].astype("float")
+df["precipitation"] = df["precipitation"].astype("float")
+df["precip_probability"] = df["precip_probability"].astype("float")
+df["wind_speed"] = df["wind_speed"].astype("float")
+df["wind_gust"] = df["wind_gust"].astype("float")
+
+df["weather_code"] = df["weather_code"].astype("int")
+
+df = df.drop_duplicates(
+    subset=["city", "date", "extraction_date"],
+    keep="last"
+)
+
+df = df.sort_values(["city", "date"])
+
+df["temp_max"] = (
+    df.groupby("city")["temp_max"]
+      .transform(lambda x: x.interpolate())
+)
+
+df["temp_min"] = (
+    df.groupby("city")["temp_min"]
+      .transform(lambda x: x.interpolate())
+)
+
+def find_nearest_probability(row):
+
+    if pd.notna(row["precip_probability"]):
+        return row["precip_probability"]
+
+    candidates = df[
+        (df["date"] == row["date"]) &
+        (df["city"] != row["city"]) &
+        (df["precip_probability"].notna())
+    ].copy()
+
+    if candidates.empty:
+        return None
+
+    candidates["distance"] = (
+        (candidates["latitude"] - row["latitude"]) ** 2
+        + (candidates["longitude"] - row["longitude"]) ** 2
     )
 
-    response.raise_for_status()
+    nearest = candidates.loc[candidates["distance"].idxmin()]
 
-    weather_results.append(response.json())
-    
-all_data = []
+    return nearest["precip_probability"]
 
-for i, weather in enumerate(weather_results):
+df["precip_probability"] = df.apply(
+    find_nearest_probability,
+    axis=1
+)
 
-    daily = weather["daily"]
+df = df.dropna(
+    subset=[
+        "city",
+        "latitude",
+        "longitude",
+        "date",
+        "extraction_date",
+        "temp_max",
+        "temp_min",
+        "precipitation",
+        "precip_probability",
+        "wind_speed",
+        "wind_gust",
+        "weather_code"
+    ]
+)
 
-    df = pd.DataFrame(daily)
+output_dir = Path("silver")
+output_dir.mkdir(exist_ok=True)
 
-    df = df.rename(columns={
-        "time": "date",
-        "temperature_2m_max": "temp_max",
-        "temperature_2m_min": "temp_min",
-        "precipitation_sum": "precipitation",
-        "precipitation_probability_max": "precip_probability",
-        "wind_speed_10m_max": "wind_speed",
-        "wind_gusts_10m_max": "wind_gust",
-    })
-
-    df["city"] = cities.iloc[i]["city"]
-    df["latitude"] = cities.iloc[i]["lat"]
-    df["longitude"] = cities.iloc[i]["lng"]
-
-    all_data.append(df)
-
-silver_df = pd.concat(all_data, ignore_index=True)
-print(silver_df)
+df.to_csv(
+    output_dir / f"weather_{today}.csv",
+    index=False
+)

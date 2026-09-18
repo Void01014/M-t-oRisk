@@ -66,7 +66,7 @@ if df.empty:
     st.stop()
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Villes", df["city"].unique())
+col1.metric("Villes", df["city"].nunique())
 col2.metric("Risque moyen", round(df["risk_score"].mean(), 1))
 col3.metric("Risque max", round(df["risk_score"].max(), 1))
 col4.metric("Jours à risque élevé", int((df["risk_level"] == "High").sum()))

@@ -1,11 +1,14 @@
 import pandas as pd
 from datetime import date
 from pathlib import Path
+from sqlalchemy.dialects.postgresql import insert
 
 today = date.today().isoformat()
 
 df = pd.read_csv(f"silver/weather_{today}.csv")
 
+df["date"] = pd.to_datetime(df["date"])
+df["extraction_date"] = pd.to_datetime(df["extraction_date"])
 
 df["temp_category"] = pd.cut(
     df["temp_max"],
@@ -87,11 +90,11 @@ df["season"] = df["month"].apply(get_season)
 
 
 def temperature_risk(temp):
-    if temp <= 30:
+    if temp <= 28:
         return 10
-    elif temp <= 35:
-        return 50
-    elif temp <= 38:
+    elif temp <= 33:
+        return 45
+    elif temp <= 37:
         return 75
     else:
         return 100
@@ -101,12 +104,12 @@ df["temp_risk"] = df["temp_max"].apply(temperature_risk)
 
 
 def wind_risk(gust):
-    if gust <= 35:
+    if gust <= 30:
         return 10
-    elif gust <= 50:
-        return 40
-    elif gust <= 65:
-        return 75
+    elif gust <= 45:
+        return 45
+    elif gust <= 60:
+        return 80
     else:
         return 100
 
@@ -129,8 +132,8 @@ df["precip_risk"] = df["precipitation"].apply(precipitation_risk)
 
 
 df["risk_score"] = (
-    0.30 * df["temp_risk"]
-    + 0.50 * df["wind_risk"]
+    0.35 * df["temp_risk"]
+    + 0.45 * df["wind_risk"]
     + 0.20 * df["precip_risk"]
 ).round(2)
 
